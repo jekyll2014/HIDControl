@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Runtime.InteropServices;
-using System.Threading;
-using Microsoft.Win32.SafeHandles;
+﻿using Microsoft.Win32.SafeHandles;
+using System;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace HIDInterface
 {
@@ -31,7 +28,7 @@ namespace HIDInterface
 
         #region win32_API_declarations
         [DllImport("setupapi.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        static extern IntPtr SetupDiGetClassDevs(ref Guid ClassGuid,
+        private static extern IntPtr SetupDiGetClassDevs(ref Guid ClassGuid,
                                                       IntPtr Enumerator,
                                                       IntPtr hwndParent,
                                                       uint Flags);
@@ -293,18 +290,21 @@ namespace HIDInterface
                 HidD_FreePreparsedData(ref ptrToPreParsedData);
 
                 //If connection was sucsessful, record the values in a global struct
-                interfaceDetails productInfo = new interfaceDetails();
-                productInfo.devicePath = devicePath;
-                productInfo.manufacturer = manfString;
-                productInfo.product = productName;
-                productInfo.PID = (ushort)attributes.ProductID;
-                productInfo.VID = (ushort)attributes.VendorID;
-                productInfo.versionNumber = (ushort)attributes.VersionNumber;
-                productInfo.IN_reportByteLength = (int)capabilities.InputReportByteLength;
-                productInfo.OUT_reportByteLength = (int)capabilities.OutputReportByteLength;
+                interfaceDetails productInfo = new interfaceDetails
+                {
+                    devicePath = devicePath,
+                    manufacturer = manfString,
+                    product = productName,
+                    PID = (ushort)attributes.ProductID,
+                    VID = (ushort)attributes.VendorID,
+                    versionNumber = (ushort)attributes.VersionNumber,
+                    IN_reportByteLength = (int)capabilities.InputReportByteLength,
+                    OUT_reportByteLength = (int)capabilities.OutputReportByteLength
+                };
 
-                if (stringIsInteger(SN))
-                    productInfo.serialNumber = Convert.ToInt32(SN);     //Check that serial number is actually a number
+                if (stringIsInteger(SN))//Check that serial number is actually a number
+                    productInfo.serialNumber = Convert.ToInt32(SN);
+                else productInfo.serialNumber = 0;
 
                 int newSize = devices.Length + 1;
                 Array.Resize(ref devices, newSize);
@@ -340,8 +340,8 @@ namespace HIDInterface
 
             if (!deviceConnected)
             {
-                string hexVID = numToHexString(VID);
-                string hexPID = numToHexString(PID);
+                string hexVID = NumToHexString(VID);
+                string hexPID = NumToHexString(PID);
                 throw new Exception("Device with VID: 0x" + hexVID + " PID: 0x" + hexPID + " SerialNumber: " + serialNumber.ToString() + " could not be found");
             }
         }
@@ -406,11 +406,14 @@ namespace HIDInterface
             deviceConnected = true;
 
             //If connection was sucsessful, record the values in a global struct
-            productInfo = new interfaceDetails();
-            productInfo.devicePath = devicePath;
-            productInfo.manufacturer = manfString;
-            productInfo.product = productName;
-            if (stringIsInteger(SN)) productInfo.serialNumber = Convert.ToInt32(SN);
+            productInfo = new interfaceDetails
+            {
+                devicePath = devicePath,
+                manufacturer = manfString,
+                product = productName
+            };
+            if (stringIsInteger(SN))
+                productInfo.serialNumber = Convert.ToInt32(SN);
             else productInfo.serialNumber = 0;
             productInfo.PID = (ushort)attributes.ProductID;
             productInfo.VID = (ushort)attributes.VendorID;
@@ -444,7 +447,7 @@ namespace HIDInterface
 
         public void write(byte[] data)
         {
-            if (data.Length > capabilities.OutputReportByteLength)
+            if (data.Length > capabilities.OutputReportByteLength - 1)
                 throw new Exception("Output report must not exceed " + (capabilities.OutputReportByteLength - 1).ToString() + " bytes");
 
             //uint numBytesWritten = 0;
@@ -458,9 +461,35 @@ namespace HIDInterface
                 throw new Exception("Filestream unable to write");
         }
 
+        public void writeLong(byte[] data)
+        {
+            if (data.Length > capabilities.OutputReportByteLength - 1)
+            {
+                int l = 0;
+                while (l < data.Length)
+                {
+                    int bufsize = data.Length - l;
+                    if (bufsize > capabilities.OutputReportByteLength - 1)
+                        bufsize = capabilities.OutputReportByteLength - 1;
+                    byte[] packet = new byte[capabilities.OutputReportByteLength];
+                    Array.Copy(data, l, packet, 1, bufsize);            //start at 1, as the first byte must be zero for HID report
+                    packet[0] = 0;
+                    if (FS_write.CanWrite)
+                        FS_write.Write(packet, 0, packet.Length);
+                    else
+                        throw new Exception("Filestream unable to write");
+                    l += bufsize;
+                }
+            }
+            else
+            {
+                write(data);
+            }
+        }
+
         //This read function will be used with asychronous operation, called by the constructor if async reads are used
         private void readAsync()
-        {            
+        {
             readData = new byte[capabilities.InputReportByteLength];
             if (FS_read.CanRead)
                 FS_read.BeginRead(readData, 0, readData.Length, new AsyncCallback(GetInputReportData), readData);
@@ -508,7 +537,7 @@ namespace HIDInterface
                 System.Globalization.CultureInfo.CurrentCulture, out result);
         }
 
-        public static string numToHexString(ushort num)
+        public static string NumToHexString(ushort num)
         {
             return String.Format("{0:X}", num);
         }

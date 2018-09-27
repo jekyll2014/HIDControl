@@ -10,11 +10,13 @@ namespace HIDControl
     {
         private HIDDevice.interfaceDetails[] HID_LIST;
         private HIDDevice selected_HID;
+        int packetMaxOut = 0;
+        int packetMaxIn = 0;
 
         private void ReadHID(byte[] message)
         {
-            if (checkBox_hexTerminal.Checked) collectBuffer(Accessory.ConvertByteArrayToHex(message, message.Length), Port1DataIn);
-            else collectBuffer(Encoding.GetEncoding(Properties.Settings.Default.CodePage).GetString(message), Port1DataIn);
+            if (checkBox_hexTerminal.Checked) CollectBuffer(Accessory.ConvertByteArrayToHex(message, message.Length), Port1DataIn);
+            else CollectBuffer(Encoding.GetEncoding(Properties.Settings.Default.CodePage).GetString(message), Port1DataIn);
         }
 
         private void RefreshHidList()
@@ -22,7 +24,14 @@ namespace HIDControl
             comboBox_HIDdevices.Items.Clear();
             HID_LIST = HIDDevice.getConnectedDevices();
             for (int i = 0; i < HID_LIST.Length; i++)
-                comboBox_HIDdevices.Items.Add(HID_LIST[i].devicePath);
+            {
+                comboBox_HIDdevices.Items.Add(" [VID " + HID_LIST[i].VID.ToString("d4") + "; PID " + HID_LIST[i].PID.ToString("d4") + "]" +
+                     HID_LIST[i].manufacturer + " / " +
+                     HID_LIST[i].product + " / " +
+                     HID_LIST[i].versionNumber.ToString() + " / " +
+                     HID_LIST[i].serialNumber.ToString() +
+                     " (maxIN=" + HID_LIST[i].IN_reportByteLength.ToString() + " / maxOUT=" + HID_LIST[i].OUT_reportByteLength.ToString() + ")");
+            }
             if (HID_LIST.Length > 0)
             {
                 comboBox_HIDdevices.SelectedIndex = 0;
@@ -36,7 +45,6 @@ namespace HIDControl
             }
         }
 
-        private int SendComing = 0;
         private int txtOutState = 0;
         private long oldTicks = DateTime.Now.Ticks, limitTick = 200;
         private int LogLinesLimit = 100;
@@ -85,7 +93,7 @@ namespace HIDControl
         }
 
         private object threadLock = new object();
-        public void collectBuffer(string tmpBuffer, int state)
+        public void CollectBuffer(string tmpBuffer, int state)
         {
             if (tmpBuffer != "")
             {
@@ -126,25 +134,26 @@ namespace HIDControl
             ToolTipTerminal.SetToolTip(textBox_terminal, "Press left mouse button to read datas from USB manually");
         }
 
-        private void button_REFRESH_Click(object sender, EventArgs e)
+        private void Button_Refresh_Click(object sender, EventArgs e)
         {
             RefreshHidList();
         }
 
-        private void button_OPEN_Click(object sender, EventArgs e)
+        private void Button_Open_Click(object sender, EventArgs e)
         {
             selected_HID = new HIDDevice(HID_LIST[comboBox_HIDdevices.SelectedIndex].devicePath, true);
             selected_HID.dataReceived += new HIDDevice.dataReceivedEvent(ReadHID);
+            int packetMaxOut = HID_LIST[comboBox_HIDdevices.SelectedIndex].OUT_reportByteLength;
+            int packetMaxIn = HID_LIST[comboBox_HIDdevices.SelectedIndex].IN_reportByteLength;
             button_Refresh.Enabled = false;
             button_Open.Enabled = false;
             comboBox_HIDdevices.Enabled = false;
             button_closeport.Enabled = true;
             button_Send.Enabled = true;
             //button_sendFile.Enabled = true;
-            textBox_fileName_TextChanged(this, EventArgs.Empty);
         }
 
-        private void button_CLOSE_Click(object sender, EventArgs e)
+        private void Button_Close_Click(object sender, EventArgs e)
         {
             selected_HID.dataReceived -= new HIDDevice.dataReceivedEvent(ReadHID);
             if (selected_HID.deviceConnected) selected_HID.close();
@@ -153,10 +162,9 @@ namespace HIDControl
             comboBox_HIDdevices.Enabled = true;
             button_closeport.Enabled = false;
             button_Send.Enabled = false;
-            button_sendFile.Enabled = false;
         }
 
-        private void button_WRITE_Click(object sender, EventArgs e)
+        private void Button_Write_Click(object sender, EventArgs e)
         {
             if (selected_HID != null)
             {
@@ -169,324 +177,49 @@ namespace HIDControl
                     else outStr += Accessory.ConvertStringToHex(textBox_param.Text);
                     if (outStr != "")
                     {
-                        if (checkBox_hexTerminal.Checked) collectBuffer(outStr, Port1DataOut);
-                        else collectBuffer(Accessory.ConvertHexToString(outStr), Port1DataOut);
                         textBox_command.AutoCompleteCustomSource.Add(textBox_command.Text);
                         textBox_param.AutoCompleteCustomSource.Add(textBox_param.Text);
-                        selected_HID.write(Accessory.ConvertHexToByteArray(outStr));
+                        selected_HID.writeLong(Accessory.ConvertHexToByteArray(outStr));
+                            if (checkBox_hexTerminal.Checked) CollectBuffer(outStr, Port1DataOut);
+                            else CollectBuffer(Accessory.ConvertHexToString(outStr), Port1DataOut);
+
                     }
                 }
             }
-            else button_CLOSE_Click(this, EventArgs.Empty);
+            else Button_Close_Click(this, EventArgs.Empty);
         }
 
-        private void checkBox_hexCommand_CheckedChanged(object sender, EventArgs e)
+        private void CheckBox_hexCommand_CheckedChanged(object sender, EventArgs e)
         {
             if (checkBox_hexCommand.Checked) textBox_command.Text = Accessory.ConvertStringToHex(textBox_command.Text);
             else textBox_command.Text = Accessory.ConvertHexToString(textBox_command.Text);
         }
 
-        private void textBox_command_Leave(object sender, EventArgs e)
+        private void TextBox_command_Leave(object sender, EventArgs e)
         {
             if (checkBox_hexCommand.Checked) textBox_command.Text = Accessory.CheckHexString(textBox_command.Text);
         }
 
-        private void textBox_param_Leave(object sender, EventArgs e)
+        private void TextBox_param_Leave(object sender, EventArgs e)
         {
             if (checkBox_hexParam.Checked) textBox_param.Text = Accessory.CheckHexString(textBox_param.Text);
         }
 
-        private void checkBox_hexParam_CheckedChanged(object sender, EventArgs e)
+        private void CheckBox_hexParam_CheckedChanged(object sender, EventArgs e)
         {
             if (checkBox_hexParam.Checked) textBox_param.Text = Accessory.ConvertStringToHex(textBox_param.Text);
             else textBox_param.Text = Accessory.ConvertHexToString(textBox_param.Text);
         }
 
-        private void button_Clear_Click(object sender, EventArgs e)
+        private void Button_Clear_Click(object sender, EventArgs e)
         {
             textBox_terminal.Clear();
         }
 
-        private void checkBox_saveTo_CheckedChanged(object sender, EventArgs e)
+        private void CheckBox_saveTo_CheckedChanged(object sender, EventArgs e)
         {
             if (checkBox_saveInput.Checked || checkBox_saveOutput.Checked) textBox_saveTo.Enabled = false;
             else textBox_saveTo.Enabled = true;
-        }
-
-        private async void button_sendFile_ClickAsync(object sender, EventArgs e)
-        {
-            if (SendComing > 0)
-            {
-                SendComing++;
-            }
-            else if (SendComing == 0)
-            {
-                UInt16 repeat = 1, delay = 1, strDelay = 1;
-                /*
-                if (textBox_fileName.Text != "" && textBox_sendNum.Text != "" && UInt16.TryParse(textBox_sendNum.Text, out repeat) && UInt16.TryParse(textBox_delay.Text, out delay) && UInt16.TryParse(textBox_strDelay.Text, out strDelay))
-                {
-                    timer1.Enabled = false;
-                    SendComing = 1;
-                    button_Send.Enabled = false;
-                    button_closeport.Enabled = false;
-                    button_openFile.Enabled = false;
-                    button_sendFile.Text = "Stop";
-                    textBox_fileName.Enabled = false;
-                    textBox_sendNum.Enabled = false;
-                    textBox_delay.Enabled = false;
-                    textBox_strDelay.Enabled = false;
-                    for (int n = 0; n < repeat; n++)
-                    {
-                        string outStr = "";
-                        string outErr = "";
-                        long length = 0;
-                        if (repeat > 1) collectBuffer(" Send cycle " + (n + 1).ToString() + "/" + repeat.ToString() + ">> ", 0);
-                        try
-                        {
-                            length = new FileInfo(textBox_fileName.Text).Length;
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("\r\nError opening file " + textBox_fileName.Text + ": " + ex.Message);
-                        }
-                        //binary file read
-                        if (!checkBox_hexFileOpen.Checked)
-                        {
-                            //byte-by-byte
-                            if (radioButton_byByte.Checked)
-                            {
-                                byte[] tmpBuffer = new byte[length];
-                                try
-                                {
-                                    tmpBuffer = File.ReadAllBytes(textBox_fileName.Text);
-                                }
-                                catch (Exception ex)
-                                {
-                                    MessageBox.Show("\r\nError reading file " + textBox_fileName.Text + ": " + ex.Message);
-                                }
-                                for (int l = 0; l < tmpBuffer.Length; l++)
-                                {
-                                    byte[] outByte = { tmpBuffer[l] };
-                                    if (checkBox_hexTerminal.Checked) outStr = Accessory.ConvertByteArrayToHex(tmpBuffer, tmpBuffer.Length);
-                                    else outStr = Encoding.GetEncoding(HIDControl.Properties.Settings.Default.CodePage).GetString(tmpBuffer);
-                                    collectBuffer(outStr, Port1DataOut);
-                                    selected_HID.write(outByte);
-                                    progressBar1.Value = (n * tmpBuffer.Length + l) * 100 / (repeat * tmpBuffer.Length);
-                                    if (strDelay > 0) await TaskEx.Delay(strDelay);
-                                    if (SendComing > 1) l = tmpBuffer.Length;
-                                }
-                            }
-                            //stream
-                            else
-                            {
-                                byte[] tmpBuffer = new byte[length];
-                                try
-                                {
-                                    tmpBuffer = File.ReadAllBytes(textBox_fileName.Text);
-                                }
-                                catch (Exception ex)
-                                {
-                                    MessageBox.Show("\r\nError reading file " + textBox_fileName.Text + ": " + ex.Message);
-                                }
-                                int l = 0;
-                                while (l < tmpBuffer.Length)
-                                {
-                                    int bufsize = tmpBuffer.Length - l;
-                                    if (bufsize > CePrinter.USB_PACK) bufsize = CePrinter.USB_PACK;
-                                    byte[] buf = new byte[bufsize];
-                                    for (int i = 0; i < bufsize; i++)
-                                    {
-                                        buf[i] = tmpBuffer[l];
-                                        l++;
-                                    }
-                                    int r = 0;
-                                    if (selected_HID != null)
-                                    {
-                                        selected_HID.write(buf);
-                                    }
-                                    if (r >= 10) outErr = "Block write failure";
-                                    if (checkBox_hexTerminal.Checked) outStr = Accessory.ConvertByteArrayToHex(buf, buf.Length);
-                                    else outStr = Encoding.GetEncoding(HIDControl.Properties.Settings.Default.CodePage).GetString(buf);
-                                    if (outErr != "") collectBuffer(outErr + ": start", Port1Error);
-                                    collectBuffer(outStr, Port1DataOut);
-                                    if (outErr != "") collectBuffer(outErr + ": end", Port1Error);
-                                    progressBar1.Value = ((n * tmpBuffer.Length + l) * 100) / (repeat * tmpBuffer.Length);
-                                    if (SendComing > 1) l = tmpBuffer.Length;
-                                }
-                            }
-                        }
-                        //hex file read
-                        else
-                        {
-                            //String-by-string
-                            if (radioButton_byString.Checked)
-                            {
-                                String[] tmpBuffer = { };
-                                try
-                                {
-                                    tmpBuffer = File.ReadAllText(textBox_fileName.Text).Replace('\n', '\r').Replace("\r\r", "\r").Split('\r');
-                                }
-                                catch (Exception ex)
-                                {
-                                    MessageBox.Show("\r\nError reading file " + textBox_fileName.Text + ": " + ex.Message);
-                                }
-                                for (int l = 0; l < tmpBuffer.Length; l++)
-                                {
-                                    if (tmpBuffer[l] != "")
-                                    {
-                                        tmpBuffer[l] = Accessory.CheckHexString(tmpBuffer[l]);
-                                        collectBuffer(outStr, Port1DataOut);
-                                        if (selected_HID.GenericWrite(Accessory.ConvertHexToByteArray(tmpBuffer[l])))
-                                        {
-                                            if (checkBox_hexTerminal.Checked) outStr = tmpBuffer[l];
-                                            else outStr = Accessory.ConvertHexToString(tmpBuffer[l]);
-                                            if (strDelay > 0) await TaskEx.Delay(strDelay);
-                                        }
-                                        else  //??????????????
-                                        {
-                                            outErr = "String" + l.ToString() + ": Write failure";
-                                        }
-                                        if (SendComing > 1) l = tmpBuffer.Length;
-                                        collectBuffer(outErr, Port1Error);
-                                        progressBar1.Value = (n * tmpBuffer.Length + l) * 100 / (repeat * tmpBuffer.Length);
-                                    }
-                                }
-                            }
-                            //byte-by-byte
-                            if (radioButton_byByte.Checked)
-                            {
-                                string tmpStrBuffer = "";
-                                try
-                                {
-                                    tmpStrBuffer = Accessory.CheckHexString(File.ReadAllText(textBox_fileName.Text));
-                                }
-                                catch (Exception ex)
-                                {
-                                    MessageBox.Show("Error reading file " + textBox_fileName.Text + ": " + ex.Message);
-                                }
-                                byte[] tmpBuffer = new byte[tmpStrBuffer.Length / 3];
-                                tmpBuffer = Accessory.ConvertHexToByteArray(tmpStrBuffer);
-                                for (int l = 0; l < tmpBuffer.Length; l++)
-                                {
-                                    byte[] outByte = { tmpBuffer[l] };
-                                    if (checkBox_hexTerminal.Checked) outStr = Accessory.ConvertByteArrayToHex(tmpBuffer, tmpBuffer.Length);
-                                    else outStr = Encoding.GetEncoding(HIDControl.Properties.Settings.Default.CodePage).GetString(tmpBuffer);
-                                    collectBuffer(outStr, Port1DataOut);
-                                    if (selected_HID.GenericWrite(outByte))
-                                    {
-                                        progressBar1.Value = (n * tmpBuffer.Length + l) * 100 / (repeat * tmpBuffer.Length);
-                                        if (strDelay > 0) await TaskEx.Delay(strDelay);
-                                    }
-                                    else
-                                    {
-                                        collectBuffer("Byte " + l.ToString() + ": Write Failure", Port1Error);
-                                    }
-                                    if (SendComing > 1) l = tmpBuffer.Length;
-                                }
-                            }
-                            //stream
-                            else
-                            {
-                                string tmpStrBuffer = "";
-                                try
-                                {
-                                    tmpStrBuffer = Accessory.CheckHexString(File.ReadAllText(textBox_fileName.Text));
-                                }
-                                catch (Exception ex)
-                                {
-                                    MessageBox.Show("Error reading file " + textBox_fileName.Text + ": " + ex.Message);
-                                }
-                                byte[] tmpBuffer = new byte[tmpStrBuffer.Length / 3];
-                                tmpBuffer = Accessory.ConvertHexToByteArray(tmpStrBuffer);
-                                int l = 0;
-                                while (l < tmpBuffer.Length)
-                                {
-                                    int bufsize = tmpBuffer.Length - l;
-                                    if (bufsize > CePrinter.USB_PACK) bufsize = CePrinter.USB_PACK;
-                                    byte[] buf = new byte[bufsize];
-                                    for (int i = 0; i < bufsize; i++)
-                                    {
-                                        buf[i] = tmpBuffer[l];
-                                        l++;
-                                    }
-                                    int r = 0;
-                                    if (selected_HID != null)
-                                    {
-                                        while (r < 10 && !selected_HID.GenericWrite(buf))
-                                        {
-                                            collectBuffer("USB write retry " + r.ToString(), Port1Error);
-                                            await TaskEx.Delay(100);
-                                            selected_HID.CloseDevice();
-                                            selected_HID.OpenDevice();
-                                            r++;
-                                        }
-                                    }
-                                    if (r >= 10) outErr = "Block write failure";
-                                    if (checkBox_hexTerminal.Checked) outStr = Accessory.ConvertByteArrayToHex(buf, buf.Length);
-                                    else outStr = Encoding.GetEncoding(HIDControl.Properties.Settings.Default.CodePage).GetString(buf);
-                                    if (outErr != "") collectBuffer(outErr + " start", Port1Error);
-                                    collectBuffer(outStr, Port1DataOut);
-                                    if (outErr != "") collectBuffer(outErr + " end", Port1Error);
-                                    progressBar1.Value = ((n * tmpBuffer.Length + l) * 100) / (repeat * tmpBuffer.Length);
-                                    if (SendComing > 1) l = tmpBuffer.Length;
-                                }
-                            }
-                        }
-                        if (repeat > 1) await TaskEx.Delay(delay);
-                        if (SendComing > 1) n = repeat;
-                    }
-                    button_Send.Enabled = true;
-                    button_closeport.Enabled = true;
-                    button_openFile.Enabled = true;
-                    button_sendFile.Text = "Send file";
-                    textBox_fileName.Enabled = true;
-                    textBox_sendNum.Enabled = true;
-                    textBox_delay.Enabled = true;
-                    textBox_strDelay.Enabled = true;
-                }
-                */
-                SendComing = 0;
-            }
-        }
-
-        private void openFileDialog1_FileOk(object sender, System.ComponentModel.CancelEventArgs e)
-        {
-            textBox_fileName.Text = openFileDialog1.FileName;
-        }
-
-        private void button_openFile_Click(object sender, EventArgs e)
-        {
-            if (checkBox_hexFileOpen.Checked == true)
-            {
-                openFileDialog1.FileName = "";
-                openFileDialog1.Title = "Open file";
-                openFileDialog1.DefaultExt = "txt";
-                openFileDialog1.Filter = "HEX files|*.hex|Text files|*.txt|All files|*.*";
-                openFileDialog1.ShowDialog();
-            }
-            else
-            {
-                openFileDialog1.FileName = "";
-                openFileDialog1.Title = "Open file";
-                openFileDialog1.DefaultExt = "bin";
-                openFileDialog1.Filter = "BIN files|*.bin|PRN files|*.prn|All files|*.*";
-                openFileDialog1.ShowDialog();
-            }
-        }
-
-        private void checkBox_hexFileOpen_CheckedChanged(object sender, EventArgs e)
-        {
-            if (!checkBox_hexFileOpen.Checked)
-            {
-                radioButton_byString.Enabled = false;
-                if (radioButton_byString.Checked) radioButton_byByte.Checked = true;
-                checkBox_hexFileOpen.Text = "binary data";
-            }
-            else
-            {
-                radioButton_byString.Enabled = true;
-                checkBox_hexFileOpen.Text = "hex text data";
-            }
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
@@ -509,17 +242,5 @@ namespace HIDControl
             LogLinesLimit = HIDControl.Properties.Settings.Default.LogLinesLimit;
         }
 
-        private void radioButton_stream_CheckedChanged(object sender, EventArgs e)
-        {
-            textBox_strDelay.Enabled = !radioButton_stream.Checked;
-        }
-
-        private void textBox_fileName_TextChanged(object sender, EventArgs e)
-        {
-            if (textBox_fileName.Text != "" && button_closeport.Enabled == true) button_sendFile.Enabled = true;
-            else button_sendFile.Enabled = false;
-        }
-
     }
-
 }
