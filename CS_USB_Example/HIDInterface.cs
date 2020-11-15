@@ -1,4 +1,5 @@
 ﻿using Microsoft.Win32.SafeHandles;
+
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -290,25 +291,34 @@ namespace HIDInterface
                 HidD_FreePreparsedData(ref ptrToPreParsedData);
 
                 //If connection was sucsessful, record the values in a global struct
-                interfaceDetails productInfo = new interfaceDetails
+                try
                 {
-                    devicePath = devicePath,
-                    manufacturer = manfString,
-                    product = productName,
-                    PID = (ushort)attributes.ProductID,
-                    VID = (ushort)attributes.VendorID,
-                    versionNumber = (ushort)attributes.VersionNumber,
-                    IN_reportByteLength = (int)capabilities.InputReportByteLength,
-                    OUT_reportByteLength = (int)capabilities.OutputReportByteLength
-                };
+                    interfaceDetails productInfo = new interfaceDetails
+                    {
+                        devicePath = devicePath,
+                        manufacturer = manfString,
+                        product = productName,
+                        PID = (ushort)attributes.ProductID,
+                        VID = (ushort)attributes.VendorID,
+                        versionNumber = (ushort)attributes.VersionNumber,
+                        IN_reportByteLength = (int)capabilities.InputReportByteLength,
+                        OUT_reportByteLength = (int)capabilities.OutputReportByteLength
+                    };
+                    if (stringIsInteger(SN))//Check that serial number is actually a number
+                        productInfo.serialNumber = Convert.ToInt32(SN);
+                    else productInfo.serialNumber = 0;
 
-                if (stringIsInteger(SN))//Check that serial number is actually a number
-                    productInfo.serialNumber = Convert.ToInt32(SN);
-                else productInfo.serialNumber = 0;
+                    int newSize = devices.Length + 1;
+                    Array.Resize(ref devices, newSize);
+                    devices[newSize - 1] = productInfo;
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                    continue;
+                }
 
-                int newSize = devices.Length + 1;
-                Array.Resize(ref devices, newSize);
-                devices[newSize - 1] = productInfo;
+
             }
             SetupDiDestroyDeviceInfoList(i);
 
@@ -418,12 +428,14 @@ namespace HIDInterface
             productInfo.PID = (ushort)attributes.ProductID;
             productInfo.VID = (ushort)attributes.VendorID;
             productInfo.versionNumber = (ushort)attributes.VersionNumber;
-            productInfo.IN_reportByteLength = (int)capabilities.InputReportByteLength;
-            productInfo.OUT_reportByteLength = (int)capabilities.OutputReportByteLength;
+            productInfo.IN_reportByteLength = (int)capabilities.InputReportByteLength == 0? 1024: capabilities.InputReportByteLength;
+            productInfo.OUT_reportByteLength = (int)capabilities.OutputReportByteLength == 0 ? 1024 : capabilities.OutputReportByteLength;
 
             //use a filestream object to bring this stuff into .NET
-            FS_read = new FileStream(handle_read, FileAccess.ReadWrite, capabilities.OutputReportByteLength, false);
-            FS_write = new FileStream(handle_write, FileAccess.ReadWrite, capabilities.InputReportByteLength, false);
+
+            FS_read = new FileStream(handle_read, FileAccess.ReadWrite, productInfo.OUT_reportByteLength, false);
+            
+            FS_write = new FileStream(handle_write, FileAccess.ReadWrite, productInfo.IN_reportByteLength, false);
 
             this.useAsyncReads = useAsyncReads;
             if (useAsyncReads)
