@@ -57,8 +57,6 @@ namespace HIDControl
             this.textBox_saveTo = new System.Windows.Forms.TextBox();
             this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
             this.checkBox_saveTime = new System.Windows.Forms.CheckBox();
-            this.checkBox_saveOutput = new System.Windows.Forms.CheckBox();
-            this.label2 = new System.Windows.Forms.Label();
             this.SuspendLayout();
             // 
             // comboBox_HIDdevices
@@ -153,6 +151,7 @@ namespace HIDControl
             this.textBox_terminal.ScrollBars = System.Windows.Forms.ScrollBars.Both;
             this.textBox_terminal.Size = new System.Drawing.Size(560, 46);
             this.textBox_terminal.TabIndex = 17;
+            this.textBox_terminal.TextChanged += new System.EventHandler(this.TextBox_terminal_TextChanged);
             // 
             // checkBox_hexCommand
             // 
@@ -179,6 +178,7 @@ namespace HIDControl
             this.checkBox_autoscroll.TabIndex = 12;
             this.checkBox_autoscroll.Text = "Autoscroll;";
             this.checkBox_autoscroll.UseVisualStyleBackColor = true;
+            this.checkBox_autoscroll.CheckedChanged += new System.EventHandler(this.CheckBox_autoscroll_CheckedChanged);
             // 
             // checkBox_hexTerminal
             // 
@@ -192,6 +192,7 @@ namespace HIDControl
             this.checkBox_hexTerminal.TabIndex = 13;
             this.checkBox_hexTerminal.Text = "Hex;";
             this.checkBox_hexTerminal.UseVisualStyleBackColor = true;
+            this.checkBox_hexTerminal.CheckedChanged += new System.EventHandler(this.CheckBox_hexTerminal_CheckedChanged);
             // 
             // checkBox_hexParam
             // 
@@ -222,7 +223,7 @@ namespace HIDControl
             // button_Clear
             // 
             this.button_Clear.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.button_Clear.Location = new System.Drawing.Point(502, 175);
+            this.button_Clear.Location = new System.Drawing.Point(502, 178);
             this.button_Clear.Name = "button_Clear";
             this.button_Clear.Size = new System.Drawing.Size(70, 25);
             this.button_Clear.TabIndex = 15;
@@ -234,13 +235,14 @@ namespace HIDControl
             // 
             this.checkBox_saveInput.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.checkBox_saveInput.AutoSize = true;
+            this.checkBox_saveInput.CheckAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.checkBox_saveInput.Checked = true;
             this.checkBox_saveInput.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.checkBox_saveInput.Location = new System.Drawing.Point(317, 183);
+            this.checkBox_saveInput.Location = new System.Drawing.Point(360, 183);
             this.checkBox_saveInput.Name = "checkBox_saveInput";
-            this.checkBox_saveInput.Size = new System.Drawing.Size(49, 17);
+            this.checkBox_saveInput.Size = new System.Drawing.Size(68, 17);
             this.checkBox_saveInput.TabIndex = 98;
-            this.checkBox_saveInput.Text = "input";
+            this.checkBox_saveInput.Text = "Save log";
             this.checkBox_saveInput.UseVisualStyleBackColor = true;
             this.checkBox_saveInput.CheckedChanged += new System.EventHandler(this.CheckBox_saveTo_CheckedChanged);
             // 
@@ -253,6 +255,7 @@ namespace HIDControl
             this.textBox_saveTo.Size = new System.Drawing.Size(62, 20);
             this.textBox_saveTo.TabIndex = 14;
             this.textBox_saveTo.Text = "usb_rx.txt";
+            this.textBox_saveTo.Leave += new System.EventHandler(this.TextBox_saveTo_Leave);
             // 
             // openFileDialog1
             // 
@@ -270,40 +273,15 @@ namespace HIDControl
             this.checkBox_saveTime.TabIndex = 116;
             this.checkBox_saveTime.Text = "time";
             this.checkBox_saveTime.UseVisualStyleBackColor = true;
-            // 
-            // checkBox_saveOutput
-            // 
-            this.checkBox_saveOutput.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.checkBox_saveOutput.AutoSize = true;
-            this.checkBox_saveOutput.Checked = true;
-            this.checkBox_saveOutput.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.checkBox_saveOutput.Location = new System.Drawing.Point(372, 183);
-            this.checkBox_saveOutput.Name = "checkBox_saveOutput";
-            this.checkBox_saveOutput.Size = new System.Drawing.Size(56, 17);
-            this.checkBox_saveOutput.TabIndex = 98;
-            this.checkBox_saveOutput.Text = "output";
-            this.checkBox_saveOutput.UseVisualStyleBackColor = true;
-            this.checkBox_saveOutput.CheckedChanged += new System.EventHandler(this.CheckBox_saveTo_CheckedChanged);
-            // 
-            // label2
-            // 
-            this.label2.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(279, 184);
-            this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(32, 13);
-            this.label2.TabIndex = 117;
-            this.label2.Text = "Save";
+            this.checkBox_saveTime.CheckedChanged += new System.EventHandler(this.CheckBox_saveTime_CheckedChanged);
             // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(584, 212);
-            this.Controls.Add(this.label2);
             this.Controls.Add(this.checkBox_saveTime);
             this.Controls.Add(this.textBox_saveTo);
-            this.Controls.Add(this.checkBox_saveOutput);
             this.Controls.Add(this.checkBox_saveInput);
             this.Controls.Add(this.button_Clear);
             this.Controls.Add(this.textBox_param);
@@ -323,7 +301,7 @@ namespace HIDControl
             this.Name = "Form1";
             this.ShowIcon = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "UsbPrnControl (c) Andrey Kalugin (jekyll@mail.ru), 2018";
+            this.Text = "HidControl (c) Andrey Kalugin (jekyll@mail.ru)";
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Form1_FormClosing);
             this.Load += new System.EventHandler(this.Form1_Load);
             this.ResumeLayout(false);
@@ -351,8 +329,6 @@ namespace HIDControl
         private TextBox textBox_saveTo;
         private OpenFileDialog openFileDialog1;
         private CheckBox checkBox_saveTime;
-        private CheckBox checkBox_saveOutput;
-        private Label label2;
         ToolTip ToolTipTerminal = new ToolTip();
     }
 }

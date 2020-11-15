@@ -1,8 +1,10 @@
 ﻿using HIDInterface;
+
 using System;
-using System.IO;
+using System.Collections.Generic;
 using System.Text;
 using System.Windows.Forms;
+using HIDControl.Properties;
 
 namespace HIDControl
 {
@@ -10,28 +12,26 @@ namespace HIDControl
     {
         private HIDDevice.interfaceDetails[] HID_LIST;
         private HIDDevice selected_HID;
-        int packetMaxOut = 0;
-        int packetMaxIn = 0;
 
         private void ReadHID(byte[] message)
         {
-            if (checkBox_hexTerminal.Checked) CollectBuffer(Accessory.ConvertByteArrayToHex(message, message.Length), Port1DataIn);
-            else CollectBuffer(Encoding.GetEncoding(Properties.Settings.Default.CodePage).GetString(message), Port1DataIn);
+            _logger.AddText(Encoding.GetEncoding(Settings.Default.CodePage).GetString(message),
+                (byte)DataDirection.Received, DateTime.Now);
         }
 
         private void RefreshHidList()
         {
             comboBox_HIDdevices.Items.Clear();
             HID_LIST = HIDDevice.getConnectedDevices();
-            for (int i = 0; i < HID_LIST.Length; i++)
-            {
-                comboBox_HIDdevices.Items.Add(" [VID " + HID_LIST[i].VID.ToString("d4") + "; PID " + HID_LIST[i].PID.ToString("d4") + "]" +
-                     HID_LIST[i].manufacturer + " / " +
-                     HID_LIST[i].product + " / " +
-                     HID_LIST[i].versionNumber.ToString() + " / " +
-                     HID_LIST[i].serialNumber.ToString() +
-                     " (maxIN=" + HID_LIST[i].IN_reportByteLength.ToString() + " / maxOUT=" + HID_LIST[i].OUT_reportByteLength.ToString() + ")");
-            }
+            for (var i = 0; i < HID_LIST.Length; i++)
+                comboBox_HIDdevices.Items.Add(" [VID " + HID_LIST[i].VID.ToString("d4") + "; PID " +
+                                              HID_LIST[i].PID.ToString("d4") + "]" +
+                                              HID_LIST[i].manufacturer + " / " +
+                                              HID_LIST[i].product + " / " +
+                                              HID_LIST[i].versionNumber + " / " +
+                                              HID_LIST[i].serialNumber +
+                                              " (maxIN=" + HID_LIST[i].IN_reportByteLength + " / maxOUT=" +
+                                              HID_LIST[i].OUT_reportByteLength + ")");
             if (HID_LIST.Length > 0)
             {
                 comboBox_HIDdevices.SelectedIndex = 0;
@@ -45,87 +45,23 @@ namespace HIDControl
             }
         }
 
-        private int txtOutState = 0;
-        private long oldTicks = DateTime.Now.Ticks, limitTick = 200;
-        private int LogLinesLimit = 100;
-        public const byte Port1DataIn = 11;
-        public const byte Port1DataOut = 12;
-        public const byte Port1Error = 15;
+        private TextLogger.TextLogger _logger;
 
-        private delegate void SetTextCallback1(string text);
-        private void SetText(string text)
+        private enum DataDirection
         {
-            text = Accessory.FilterZeroChar(text);
-            // InvokeRequired required compares the thread ID of the
-            // calling thread to the thread ID of the creating thread.
-            // If these threads are different, it returns true.
-            //if (this.textBox_terminal1.InvokeRequired)
-            if (textBox_terminal.InvokeRequired)
-            {
-                SetTextCallback1 d = new SetTextCallback1(SetText);
-                BeginInvoke(d, new object[] { text });
-            }
-            else
-            {
-                int pos = textBox_terminal.SelectionStart;
-                textBox_terminal.AppendText(text);
-                if (textBox_terminal.Lines.Length > LogLinesLimit)
-                {
-                    StringBuilder tmp = new StringBuilder();
-                    for (int i = textBox_terminal.Lines.Length - LogLinesLimit; i < textBox_terminal.Lines.Length; i++)
-                    {
-                        tmp.Append(textBox_terminal.Lines[i]);
-                        tmp.Append("\r\n");
-                    }
-                    textBox_terminal.Text = tmp.ToString();
-                }
-                if (checkBox_autoscroll.Checked)
-                {
-                    textBox_terminal.SelectionStart = textBox_terminal.Text.Length;
-                    textBox_terminal.ScrollToCaret();
-                }
-                else
-                {
-                    textBox_terminal.SelectionStart = pos;
-                    textBox_terminal.ScrollToCaret();
-                }
-            }
+            Received,
+            Sent,
+            Info,
+            Error
         }
 
-        private object threadLock = new object();
-        public void CollectBuffer(string tmpBuffer, int state)
+        private readonly Dictionary<byte, string> _directions = new Dictionary<byte, string>
         {
-            if (tmpBuffer != "")
-            {
-                string time = DateTime.Today.ToShortDateString() + " " + DateTime.Now.ToLongTimeString() + "." + DateTime.Now.Millisecond.ToString("D3");
-                lock (threadLock)
-                {
-                    if (!(txtOutState == state && (DateTime.Now.Ticks - oldTicks) < limitTick && state != Port1DataOut))
-                    {
-                        if (state == Port1DataIn) tmpBuffer = "<< " + tmpBuffer;         //sending data
-                        else if (state == Port1DataOut) tmpBuffer = ">> " + tmpBuffer;    //receiving data
-                        else if (state == Port1Error) tmpBuffer = "!! " + tmpBuffer;    //error occured
-
-                        if (checkBox_saveTime.Checked == true) tmpBuffer = time + " " + tmpBuffer;
-                        tmpBuffer = "\r\n" + tmpBuffer;
-                        txtOutState = state;
-                    }
-                    if ((checkBox_saveInput.Checked == true && state == Port1DataIn) || (checkBox_saveOutput.Checked == true && state == Port1DataOut))
-                    {
-                        try
-                        {
-                            File.AppendAllText(textBox_saveTo.Text, tmpBuffer, Encoding.GetEncoding(HIDControl.Properties.Settings.Default.CodePage));
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("\r\nError opening file " + textBox_saveTo.Text + ": " + ex.Message);
-                        }
-                    }
-                    SetText(tmpBuffer);
-                    oldTicks = DateTime.Now.Ticks;
-                }
-            }
-        }
+            {(byte) DataDirection.Received, "<<"},
+            {(byte) DataDirection.Sent, ">>"},
+            {(byte) DataDirection.Info, "**"},
+            {(byte) DataDirection.Error, "!!"}
+        };
 
         public Form1()
         {
@@ -141,22 +77,37 @@ namespace HIDControl
 
         private void Button_Open_Click(object sender, EventArgs e)
         {
-            selected_HID = new HIDDevice(HID_LIST[comboBox_HIDdevices.SelectedIndex].devicePath, true);
-            selected_HID.dataReceived += new HIDDevice.dataReceivedEvent(ReadHID);
-            int packetMaxOut = HID_LIST[comboBox_HIDdevices.SelectedIndex].OUT_reportByteLength;
-            int packetMaxIn = HID_LIST[comboBox_HIDdevices.SelectedIndex].IN_reportByteLength;
+            try
+            {
+                selected_HID = new HIDDevice(HID_LIST[comboBox_HIDdevices.SelectedIndex].devicePath, true);
+            }
+            catch (Exception exception)
+            {
+                _logger.AddText("Error opening device: " + exception, (byte)DataDirection.Error, DateTime.Now, TextLogger.TextLogger.TextFormat.PlainText);
+                return;
+            }
+
+            selected_HID.dataReceived += ReadHID;
+            var packetMaxOut = HID_LIST[comboBox_HIDdevices.SelectedIndex].OUT_reportByteLength;
+            var packetMaxIn = HID_LIST[comboBox_HIDdevices.SelectedIndex].IN_reportByteLength;
             button_Refresh.Enabled = false;
             button_Open.Enabled = false;
             comboBox_HIDdevices.Enabled = false;
             button_closeport.Enabled = true;
             button_Send.Enabled = true;
-            //button_sendFile.Enabled = true;
         }
 
         private void Button_Close_Click(object sender, EventArgs e)
         {
-            selected_HID.dataReceived -= new HIDDevice.dataReceivedEvent(ReadHID);
-            if (selected_HID.deviceConnected) selected_HID.close();
+            selected_HID.dataReceived -= ReadHID;
+            try
+            {
+                if (selected_HID.deviceConnected) selected_HID.close();
+            }
+            catch (Exception exception)
+            {
+                _logger.AddText("Error closing device: " + exception, (byte)DataDirection.Error, DateTime.Now, TextLogger.TextLogger.TextFormat.PlainText);
+            }
             button_Refresh.Enabled = true;
             button_Open.Enabled = true;
             comboBox_HIDdevices.Enabled = true;
@@ -179,14 +130,22 @@ namespace HIDControl
                     {
                         textBox_command.AutoCompleteCustomSource.Add(textBox_command.Text);
                         textBox_param.AutoCompleteCustomSource.Add(textBox_param.Text);
-                        selected_HID.writeLong(Accessory.ConvertHexToByteArray(outStr));
-                            if (checkBox_hexTerminal.Checked) CollectBuffer(outStr, Port1DataOut);
-                            else CollectBuffer(Accessory.ConvertHexToString(outStr), Port1DataOut);
-
+                        _logger.AddText(Accessory.ConvertHexToString(outStr), (byte)DataDirection.Sent, DateTime.Now);
+                        try
+                        {
+                            selected_HID.write(Accessory.ConvertHexToByteArray(outStr));
+                        }
+                        catch (Exception exception)
+                        {
+                            _logger.AddText("Error writing to device: " + exception, (byte)DataDirection.Error, DateTime.Now, TextLogger.TextLogger.TextFormat.PlainText);
+                        }
                     }
                 }
             }
-            else Button_Close_Click(this, EventArgs.Empty);
+            else
+            {
+                Button_Close_Click(this, EventArgs.Empty);
+            }
         }
 
         private void CheckBox_hexCommand_CheckedChanged(object sender, EventArgs e)
@@ -213,34 +172,110 @@ namespace HIDControl
 
         private void Button_Clear_Click(object sender, EventArgs e)
         {
-            textBox_terminal.Clear();
+            _logger.Clear();
         }
 
         private void CheckBox_saveTo_CheckedChanged(object sender, EventArgs e)
         {
-            if (checkBox_saveInput.Checked || checkBox_saveOutput.Checked) textBox_saveTo.Enabled = false;
-            else textBox_saveTo.Enabled = true;
+            textBox_saveTo.Enabled = !checkBox_saveInput.Checked;
+            _logger.AutoSave = checkBox_saveInput.Checked;
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
-            HIDControl.Properties.Settings.Default.checkBox_hexCommand = checkBox_hexCommand.Checked;
-            HIDControl.Properties.Settings.Default.textBox_command = textBox_command.Text;
-            HIDControl.Properties.Settings.Default.checkBox_hexParam = checkBox_hexParam.Checked;
-            HIDControl.Properties.Settings.Default.textBox_param = textBox_param.Text;
-            HIDControl.Properties.Settings.Default.Save();
+            Settings.Default.checkBox_hexCommand = checkBox_hexCommand.Checked;
+            Settings.Default.textBox_command = textBox_command.Text;
+            Settings.Default.checkBox_hexParam = checkBox_hexParam.Checked;
+            Settings.Default.textBox_param = textBox_param.Text;
+            Settings.Default.Save();
+        }
+
+        private void CheckBox_autoscroll_CheckedChanged(object sender, EventArgs e)
+        {
+            if (checkBox_autoscroll.Checked)
+            {
+                _logger.AutoScroll = true;
+                textBox_terminal.TextChanged += TextBox_terminal_TextChanged;
+            }
+            else
+            {
+                _logger.AutoScroll = false;
+                textBox_terminal.TextChanged -= TextBox_terminal_TextChanged;
+            }
+        }
+
+        private void TextBox_terminal_TextChanged(object sender, EventArgs e)
+        {
+            if (checkBox_autoscroll.Checked)
+            {
+                textBox_terminal.SelectionStart = textBox_terminal.Text.Length;
+                textBox_terminal.ScrollToCaret();
+            }
         }
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            checkBox_hexCommand.Checked = HIDControl.Properties.Settings.Default.checkBox_hexCommand;
-            textBox_command.Text = HIDControl.Properties.Settings.Default.textBox_command;
-            checkBox_hexParam.Checked = HIDControl.Properties.Settings.Default.checkBox_hexParam;
-            textBox_param.Text = HIDControl.Properties.Settings.Default.textBox_param;
-            limitTick = HIDControl.Properties.Settings.Default.LineBreakTimeout;
-            limitTick *= 10000;
-            LogLinesLimit = HIDControl.Properties.Settings.Default.LogLinesLimit;
+            checkBox_hexCommand.Checked = Settings.Default.checkBox_hexCommand;
+            textBox_command.Text = Settings.Default.textBox_command;
+            checkBox_hexParam.Checked = Settings.Default.checkBox_hexParam;
+            textBox_param.Text = Settings.Default.textBox_param;
+
+            _logger = new TextLogger.TextLogger(this)
+            {
+                Channels = _directions,
+                FilterZeroChar = false
+            };
+            textBox_terminal.DataBindings.Add("Text", _logger, "Text", false, DataSourceUpdateMode.OnPropertyChanged);
+
+            _logger.LineTimeLimit = Settings.Default.LineBreakTimeout;
+            _logger.LineLimit = Settings.Default.LogLinesLimit;
+            _logger.AutoSave = checkBox_saveInput.Checked;
+            _logger.LogFileName = textBox_saveTo.Text;
+
+            _logger.DefaultTextFormat = checkBox_hexTerminal.Checked
+                ? TextLogger.TextLogger.TextFormat.Hex
+                : TextLogger.TextLogger.TextFormat.AutoReplaceHex;
+
+            _logger.DefaultTimeFormat =
+                checkBox_saveTime.Checked
+                    ? TextLogger.TextLogger.TimeFormat.LongTime
+                    : TextLogger.TextLogger.TimeFormat.None;
+
+            _logger.DefaultDateFormat =
+                checkBox_saveTime.Checked
+                    ? TextLogger.TextLogger.DateFormat.ShortDate
+                    : TextLogger.TextLogger.DateFormat.None;
+
+            _logger.AutoScroll = checkBox_autoscroll.Checked;
+
+            CheckBox_autoscroll_CheckedChanged(null, EventArgs.Empty);
         }
 
+        private void CheckBox_hexTerminal_CheckedChanged(object sender, EventArgs e)
+        {
+            if (checkBox_hexTerminal.Checked)
+                _logger.DefaultTextFormat = TextLogger.TextLogger.TextFormat.Hex;
+            else
+                _logger.DefaultTextFormat = TextLogger.TextLogger.TextFormat.AutoReplaceHex;
+        }
+
+        private void CheckBox_saveTime_CheckedChanged(object sender, EventArgs e)
+        {
+            if (checkBox_saveTime.Checked)
+            {
+                _logger.DefaultDateFormat = TextLogger.TextLogger.DateFormat.ShortDate;
+                _logger.DefaultTimeFormat = TextLogger.TextLogger.TimeFormat.LongTime;
+            }
+            else
+            {
+                _logger.DefaultDateFormat = TextLogger.TextLogger.DateFormat.None;
+                _logger.DefaultTimeFormat = TextLogger.TextLogger.TimeFormat.None;
+            }
+        }
+
+        private void TextBox_saveTo_Leave(object sender, EventArgs e)
+        {
+            _logger.LogFileName = textBox_saveTo.Text;
+        }
     }
 }
